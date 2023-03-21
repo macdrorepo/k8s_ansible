@@ -1,0 +1,13 @@
+# Set Static IP using netplan
+- name: Copy the template 00-installer-config.yaml over
+  vars:
+    new_static_ip: "{{ ansible_default_ipv4.address }}"
+    netplan_name_servers: "1.1.1.1"
+    netplan_router_gateway: "{{ router_gateway_address }}"
+  template:
+    src: 00-netplan-static-ip-config-ubuntu.j2
+    dest: /etc/netplan/00-installer-config.yaml
+    owner: root
+    group: root
+    mode: 0644
+    backup: yes

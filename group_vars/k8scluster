@@ -1,0 +1,14 @@
+# Contanerd
+containerd_package: containerd.io
+containerd_package_state: present
+containerd_service_state: started
+containerd_service_enabled: true
+containerd_config_default_write: true
+containerd_config_cgroup_driver_systemd: true
+docker_users:
+  - maciej
+  - lab
+kubectl_users:
+  - maciej
+  - lab
+pod_network_cidr: 10.244.0.0/16

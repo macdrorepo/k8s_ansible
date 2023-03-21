@@ -1,0 +1,21 @@
+ansible_user: maciej
+dns_ip: 192.168.1.101
+gateway_ip: 192.168.1.1
+my_client_ip: 192.168.1.112
+ssh_port: 22
+common_packages: [qemu-guest-agent, fail2ban, vim, curl, apt-transport-https, ca-certificates, gnupg2, gnupg-agent, software-properties-common, python3-pip, git, yamllint, bridge-utils, net-tools, unzip]
+k8s_packages: [kubeadm, kubectl, kubelet]
+ssh_users: 
+  - lab
+f2b_jail_local: |
+  [DEFAULT]
+  ignoreip = 127.0.0.1/8 ::1 {{ my_client_ip }}
+  findtime = 15m
+  bantime = 2h
+  maxretry = 5
+  sshd_backend = systemd
+  
+  [sshd]
+  enabled = true
+  maxretry = 3
+  port = {{ ssh_port }}

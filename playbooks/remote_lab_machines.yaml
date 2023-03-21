@@ -1,0 +1,347 @@
+---
+- name: Add ssh_users to system
+  hosts: k8scluster, ansible
+  become: true
+  tasks:
+    - name: Create Linux User
+      user:
+        name: "{{ item }}"
+        comment: "User name {{ item }}"
+        shell: /bin/bash
+      loop: "{{ ssh_users }}"
+
+    - name: Add public key for users
+      authorized_key:
+        user: "{{ item }}"
+        state: present
+        key: "{{ lookup('file', '{{ playbook_dir }}/{{ item }}.pub') }}"
+      loop: "{{ ssh_users }}"
+
+    - name: Setting up timezone to Poland/Warsaw
+      community.general.timezone:
+        name: Europe/Warsaw
+
+- name: Install latest updates and packages
+  hosts: k8scluster, ansible
+  become: true
+  tasks:
+    - name: Install latest system updates
+      include_tasks: update_apt.yaml
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Install apt packages
+      apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: true
+      loop: "{{ common_packages }}"
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Setup fail2ban service
+      copy:
+        content: "{{ f2b_jail_local }}"
+        dest: /etc/fail2ban/jail.local
+        owner: root
+        group: root
+        mode: 0644   
+
+    - name: Enable fail2ban
+      service:
+        name: fail2ban
+        state: started
+        enabled: yes
+    
+    - name: Enable qemu
+      service:
+        name: qemu-guest-agent
+        state: started
+        enabled: yes
+
+    - name: Check if a reboot is required.
+      stat:
+        path: /var/run/reboot-required
+        get_md5: no
+      register: reboot_after_updates
+
+    - name: reboot
+      reboot:
+        msg: "Reboot to enable qemu and fail2ban"
+        connect_timeout: 5
+        reboot_timeout: 600
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: whoami
+      when: reboot_after_updates.stat.exists == true        
+    
+    - name: Wait for hosts to comeback
+      wait_for_connection:
+      args:
+        connect_timeout: 5
+        delay: 10
+        timeout: 120
+      when: reboot_after_updates.stat.exists == true
+      
+    - name: Remove dependencies that are no longer required.
+      apt:
+        autoremove: yes
+
+- name: Setup hosts
+  hosts: k8scluster, ansible
+  become: true
+  tasks:
+    - name: Test message
+      debug:
+        msg: "{{ ip_address }}"
+      vars:
+        ip_address: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+      loop: "{{ groups['ansible'] }}"
+
+    - name: Add ssh user to sudoers
+      lineinfile:
+        path: /etc/sudoers.d/{{ item }}
+        line: "{{ item }} ALL=(ALL) NOPASSWD:ALL"
+        state: present
+        mode: 0440
+        create: yes
+        validate: 'visudo -cf %s'
+      loop: "{{ ssh_users }}"
+
+    - name: Copy motd
+      template:
+        src: motd.j2
+        dest: /etc/motd
+        owner: root
+        group: root
+        mode: u=rw,g=r,o=r
+      tags: motd
+
+- name: Setup static IP on one proxmox vm
+  hosts: ansible
+  become: true
+  tasks:
+    - name: Copy netplan file
+      template:
+        src: 50-cloud-init.j2
+        dest: /etc/netplan/50-cloud-init.yaml
+        owner: root
+        group: root
+        mode: 0644
+      vars:
+        ip_address: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+      loop: "{{ groups['ansible'] }}"
+      tags: netplan
+      notify: apply netplan
+
+- name: Tasks for docker setup
+  become: true
+  hosts: k8scluster
+  tasks:
+    - name: Install docker
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/trusted.gpg.d/docker-keyring.asc
+        mode: '0644'
+        force: true
+
+    - name: Add apt repository for stable version
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/trusted.gpg.d/docker-keyring.asc] https://download.docker.com/linux/ubuntu xenial stable"
+        state: present
+
+    - name: Install docker and its dependecies
+      ansible.builtin.apt: 
+        name: "{{ packages }}"
+        state: present
+        update_cache: yes
+      vars:
+        packages:
+        - docker-ce 
+        - docker-ce-cli
+      notify: start docker
+
+    - name: Add users to docker group
+      ansible.builtin.user:
+        name: "{{ item }}"
+        group: docker
+      loop: "{{ docker_users }}"
+
+  roles:
+    - { role: roles/geerlingguy.containerd, tags: containerd, become: true }
+
+- name: Kubernetes prerequistes and installation
+  become: true
+  hosts: k8scluster
+  tasks:
+    - name: Enable bridging
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: true
+    
+    - name: Crete k8s.conf
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          br_netfilter
+
+    - name: reboot
+      ansible.builtin.reboot:
+        msg: "Reboot to finish k8s pre-req"
+        connect_timeout: 5
+        reboot_timeout: 600
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: whoami
+    
+    - name: Wait for hosts to comeback
+      wait_for_connection:
+      args:
+        connect_timeout: 5
+        delay: 10
+        timeout: 120
+
+- name: Installing Kubernetes
+  become: true
+  hosts: k8scluster
+  tags: k8s
+  tasks:
+    - name: Add an apt signing key for Kubernetes # https://github.com/kubernetes/release/issues/1982#issuecomment-1415573798
+      ansible.builtin.shell: >
+        curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor | sudo dd status=none of=/usr/share/keyrings/kubernetes-archive-keyring.gpg
+
+    - name: Adding apt repository for Kubernetes # https://github.com/kubernetes/release/issues/1982#issuecomment-1415573798
+      ansible.builtin.shell: >
+        echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+    - name: Refreshing apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install k8s packages
+      ansible.builtin.apt:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ k8s_packages }}"
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Configute node IP
+      ansible.builtin.lineinfile:
+        create: yes
+        path: /etc/default/kubelet
+        line: "{{ ip_address }}"
+      vars: 
+        ip_address: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+    
+    - name: Restart kubelet
+      ansible.builtin.service:
+        name: kubelet
+        daemon_reload: yes
+        state: restarted
+
+- name: Setup k8s master
+  hosts: k8s_master
+  become: true
+  tags: k8s_master_setup
+  tasks:
+    - name: Test message host
+      debug:
+        msg: "{{ hostname }}"
+      vars:
+        hostname: "{{ hostvars[inventory_hostname]['ansible_hostname'] }}"
+    
+    - name: Test message ip
+      debug:
+        msg: "{{ ip }}"
+      vars:
+        ip: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+
+    - name: Register status of /etc/kubernetes/admin.conf
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: admin_conf_exists
+
+    - name: Initialize the Kubernetes cluster using kubeadm
+      when: "not admin_conf_exists.stat.exists"
+      ansible.builtin.command: >
+        kubeadm init --control-plane-endpoint={{ ip_address }} --node-name {{ hostname }} --pod-network-cidr={{ pod_network_cidr }}
+      vars:
+        ip_address: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+        hostname: "{{ hostvars[inventory_hostname]['ansible_hostname'] }}"
+
+    - name: Create .kube directory for users
+      when: "not admin_conf_exists.stat.exists"
+      ansible.builtin.file:
+        path: "/home/{{ item }}/.kube"
+        state: directory
+        mode: 0755
+      loop: "{{ kubectl_users }}"
+
+    - name: Copy admin.conf to user .kube folder
+      when: "not admin_conf_exists.stat.exists"    
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "/home/{{ item }}/.kube/config"
+        owner: "{{ item }}"
+        group: "{{ item }}"
+        remote_src: true
+      loop: "{{ kubectl_users }}"
+
+    - name: Generate join command
+      when: "not admin_conf_exists.stat.exists"
+      ansible.builtin.command:
+        kubeadm token create --print-join-command
+      register: join_command
+    
+    - name: Copy join command to local file
+      when: "not admin_conf_exists.stat.exists"
+      local_action: copy content="{{ join_command.stdout_lines[0] }}" dest="{{ playbook_dir }}/join-command"
+      become: false
+    
+    - name: Apply flannel networking
+      # when: "not admin_conf_exists.stat.exists"
+      ansible.builtin.shell:
+        kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+      environment:
+        KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+
+- name: Setup k8s nodes
+  hosts: k8sworkers
+  become: true
+  tags: k8s_workers_setup
+  tasks:
+    - name: Test message k8sworker
+      debug:
+        msg: "{{ ip_address }}"
+      vars:
+        ip_address: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+      loop: "{{ groups['k8sworkers'] }}"
+      run_once: true
+
+    - name: Register status of /etc/kubernetes/kubelet.conf
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf_exists
+
+    - name: Copy the join command to server location
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/join-command"
+        dest: /tmp/join-command.sh
+        mode: 0777
+    
+    - name: Join the node to cluster
+      when: "not kubelet_conf_exists.stat.exists"
+      ansible.builtin.command:
+        sh /tmp/join-command.sh
+
+    - name: Delete join file
+      ansible.builtin.file:
+        path: /tmp/join-command.sh
+        state: absent
+
+    - name: Delete join file
+      local_action: file path="{{ playbook_dir }}/join-command" state=absent
+      become: false
+        
+
+
+        

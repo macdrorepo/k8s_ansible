@@ -1,0 +1,12 @@
+# Configure static IP for Ubuntu 22.04 machine
+network:
+  version: 2
+  ethernets:
+    eth0:
+      addresses: [{{ ip_address }}/24]
+      nameservers:
+        addresses: [{{ dns_ip }}] # Populate this list with the DNS servers necessary.
+      renderer: networkd
+      routes:
+        - to: default
+          via: {{ gateway_ip }}

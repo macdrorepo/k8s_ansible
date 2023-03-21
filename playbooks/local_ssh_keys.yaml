@@ -1,0 +1,11 @@
+---
+- name: Generate SSH key
+  hosts: local
+  tasks:
+    - name: Generate SSH key for user
+      openssh_keypair:
+        path: "{{ playbook_dir }}/{{ item }}"
+        type: ed25519
+        state: present
+        comment: "key used for anisble connectivity"
+      loop: "{{ ssh_user }}"
