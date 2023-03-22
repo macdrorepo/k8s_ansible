@@ -5,6 +5,7 @@ my_client_ip: 192.168.1.112
 ssh_port: 22
 common_packages: [qemu-guest-agent, fail2ban, vim, curl, apt-transport-https, ca-certificates, gnupg2, gnupg-agent, software-properties-common, python3-pip, git, yamllint, bridge-utils, net-tools, unzip]
 k8s_packages: [kubeadm, kubectl, kubelet]
+local_kube_path: /Users/maciejdrozdzik
 ssh_users: 
   - lab
 f2b_jail_local: |

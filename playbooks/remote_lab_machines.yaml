@@ -341,7 +341,4 @@
     - name: Delete join file
       local_action: file path="{{ playbook_dir }}/join-command" state=absent
       become: false
-        
-
-
-        
+      

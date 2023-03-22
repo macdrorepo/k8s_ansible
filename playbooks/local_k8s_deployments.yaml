@@ -1,0 +1,39 @@
+---
+- name: Ensure k8s community module dependencies are installed
+  become: true
+  hosts: local
+  tags: k8s_deployments
+  tasks:
+    - name: Install openshift and pyyaml
+      ansible.builtin.pip:
+        name:
+          - openshift
+          - pyyaml
+          - jsonpatch
+    - name: Create ns to test if k8s module is working
+      kubernetes.core.k8s:
+        name: test
+        api_version: v1
+        kind: namespace
+        state: present
+        kubeconfig: ~/.kube/config
+
+    - name: Apply mtallb      # when: "not admin_conf_exists.stat.exists"
+      ansible.builtin.shell:
+        kubectl apply -k {{ playbook_dir}}/manifests/metallb/
+      environment:
+        KUBECONFIG: "{{ local_kube_path }}/.kube/config"
+
+    - name: Define ip adresses pool for metallb
+      run_once: true
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ playbook_dir}}/manifests/metallb/ip_adress_pool.yaml"
+        kubeconfig: "{{ local_kube_path }}/.kube/config"
+        
+    
+    
+
+
+        
+    
