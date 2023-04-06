@@ -31,6 +31,29 @@
         src: "{{ playbook_dir}}/manifests/metallb/ip_adress_pool.yaml"
         kubeconfig: "{{ local_kube_path }}/.kube/config"
 
+    - name: Create NGINX namesapce
+      kubernetes.core.k8s:
+        name: ingress-nginx
+        api_version: v1
+        kind: namespace
+        state: present
+        kubeconfig: "{{ local_kube_path }}/.kube/config"
+
+    - name: Download NGINX Ingress Controller
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.7.0/deploy/static/provider/cloud/deploy.yaml
+        dest: "{{ playbook_dir}}/manifests/nginx/deploy.yaml"
+        mode: 0644
+
+    - name: Apply NGINX manifest
+      kubernetes.core.k8s:
+        state: present
+        wait_sleep: 240
+        wait_timeout: 360
+        src: "{{ playbook_dir}}/manifests/nginx/deploy.yaml"
+        namespace: ingress-nginx
+        kubeconfig: "{{ local_kube_path }}/.kube/config"
+
     - name: Create ArgoCD namesapce
       kubernetes.core.k8s:
         name: argocd
