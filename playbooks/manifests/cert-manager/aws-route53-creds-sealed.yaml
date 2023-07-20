@@ -1,0 +1,15 @@
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: route53-creds
+  namespace: cert-manager
+spec:
+  encryptedData:
+    secret-access-key: AgChX5jPNNK+JlufMJUeHNeF7eAZoJWtwpzwvNUdCdhcqoeYW8F+D1N7sQH3/olwyvvR7UAVwgS1qk+4h14k8MsQd4fls89msQHvzz6G5YgkpmIPMfONYahtRK0oZkNj5Y1DPXo8rkMfHl9UPccVHXwk6mmHFfZR47ZVO2RVZ0DEw0wEgoOt7QDaU1gFWaQm5+H6Y4fqQGiHoi3FMXEg8O0aWBPbC96UcitrO/IzUfNexIAQfOuJF7TUNLRtKLRT5oUsrOLOBsgq17NozHGYuzF3jLBRTRKE5rZjMRYY1hT8WQrHle5SzeayGUNQ1XSglStXIxgUJo1OEh/k7+JUiF2LR3g+1N1F9qdKdKWL6XatA7d2da7drilkZMr5i2L7lnBQLsnrZ4LfUM8rLMZyQ009YoLScorNquVObfcbJ6IMW84JDH9fkJ/l/MMdKtjtXUvLs7ee7p+vLDVn+S9T+XYUgQoMsWiQPaWbHjrsMuO+aT+2Zm/VmDid8MqZBpVTNUlBm98avJD5k9OqE0ve3AfexzPxRfNIuoSA6is7aren7NnPYRUc5gOSaEiRr8osFJKtuBwpvQqP9+vPgh8W8XBMHlfp5gcT9ambEYXvBzVsuU9n0+ge+s1sJzLhO/5X0+fNqSRan8m6sjG+BSaSa1YlWqvvH2ajaUtLdWv+hm+ILF1QHQ0yvARzL/LUE1dGjgXABb2k82tm5IaDjWNF+Xu1fqb5getjpAhcpamRu1ISM0lt5QEe6vn1
+  template:
+    metadata:
+      creationTimestamp: null
+      name: route53-creds
+      namespace: cert-manager
+    type: Opaque

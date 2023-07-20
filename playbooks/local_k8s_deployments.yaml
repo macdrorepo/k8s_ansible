@@ -11,92 +11,41 @@
           - pyyaml
           - jsonpatch
 
-    - name: Create ns to test if k8s module is working
-      kubernetes.core.k8s:
-        name: test
-        api_version: v1
-        kind: namespace
-        state: present
-        kubeconfig: ~/.kube/config
+    # - name: Create ns to test if k8s module is working
+    #   kubernetes.core.k8s:
+    #     name: test
+    #     api_version: v1
+    #     kind: namespace
+    #     state: present
+    #     kubeconfig: ~/.kube/config
 
-    - name: Apply mtallb      # when: "not admin_conf_exists.stat.exists"
+    - name: Apply metallb      # when: "not admin_conf_exists.stat.exists"
       ansible.builtin.shell:
         kubectl apply -k {{ playbook_dir}}/manifests/metallb/
       environment:
         KUBECONFIG: "{{ local_kube_path }}/.kube/config"
 
-    - name: Define ip adresses pool for metallb
+    - name: Define ip adres pool for metallb
       run_once: true
       kubernetes.core.k8s:
         state: present
         src: "{{ playbook_dir}}/manifests/metallb/ip_adress_pool.yaml"
         kubeconfig: "{{ local_kube_path }}/.kube/config"
 
-    - name: Apply NGINX      # when: "not admin_conf_exists.stat.exists"
+    - name: Apply nginx controller      # when: "not admin_conf_exists.stat.exists"
       ansible.builtin.shell:
         kubectl apply -k {{ playbook_dir}}/manifests/nginx/
       environment:
         KUBECONFIG: "{{ local_kube_path }}/.kube/config"
 
-    - name: Apply ArgoCD      # when: "not admin_conf_exists.stat.exists"
+    - name: Apply Sealed Secret      # when: "not admin_conf_exists.stat.exists"
       ansible.builtin.shell:
-        kubectl apply -k {{ playbook_dir}}/manifests/argocd/
+        kubectl apply -k {{ playbook_dir}}/manifests/sealed-secrets/
       environment:
         KUBECONFIG: "{{ local_kube_path }}/.kube/config"
 
-    # - name: Create NGINX namesapce
-    #   kubernetes.core.k8s:
-    #     name: ingress-nginx
-    #     api_version: v1
-    #     kind: namespace
-    #     state: present
-    #     kubeconfig: "{{ local_kube_path }}/.kube/config"
-
-    # - name: Download NGINX Ingress Controller
-    #   ansible.builtin.get_url:
-    #     url: https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.7.0/deploy/static/provider/cloud/deploy.yaml
-    #     dest: "{{ playbook_dir}}/manifests/nginx/deploy.yaml"
-    #     mode: 0644
-
-    # - name: Apply NGINX manifest
-    #   kubernetes.core.k8s:
-    #     state: present
-    #     wait_sleep: 240
-    #     wait_timeout: 360
-    #     src: "{{ playbook_dir}}/manifests/nginx/deploy.yaml"
-    #     namespace: ingress-nginx
-    #     kubeconfig: "{{ local_kube_path }}/.kube/config"
-
-    # - name: Create ArgoCD namesapce
-    #   kubernetes.core.k8s:
-    #     name: argocd
-    #     api_version: v1
-    #     kind: namespace
-    #     state: present
-    #     kubeconfig: "{{ local_kube_path }}/.kube/config"
-
-    # - name: Download ArgoCD manifest
-    #   ansible.builtin.get_url:
-    #     url: https://raw.githubusercontent.com/argoproj/argo-cd/v2.6.7/manifests/install.yaml
-    #     dest: "{{ playbook_dir}}/manifests/argocd/install.yaml"
-    #     mode: 0644
-    
-    # - name: Apply ArgoCD manifest
-    #   kubernetes.core.k8s:
-    #     state: present
-    #     wait_sleep: 240
-    #     wait_timeout: 360
-    #     src: "{{ playbook_dir}}/manifests/argocd/install.yaml"
-    #     namespace: argocd
-    #     kubeconfig: "{{ local_kube_path }}/.kube/config"
-
-    # - name: Change ArgoCD service to LoadBalancer
-    #   kubernetes.core.k8s:
-    #     state: patched
-    #     kind: service
-    #     name: argocd-server
-    #     namespace: argocd
-    #     definition:
-    #       spec:
-    #         type: "LoadBalancer"
-    #     kubeconfig: "{{ local_kube_path }}/.kube/config"
+    - name: Apply Cert Manger      # when: "not admin_conf_exists.stat.exists"
+      ansible.builtin.shell:
+        kubectl apply -k {{ playbook_dir}}/manifests/cert-manager/
+      environment:
+        KUBECONFIG: "{{ local_kube_path }}/.kube/config"
