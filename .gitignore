@@ -1,1 +1,3 @@
 playbooks/**/aws-route53-creds.yaml
+lab
+lab.pub
